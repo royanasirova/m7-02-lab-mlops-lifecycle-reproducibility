@@ -1,0 +1,40 @@
+registry:
+  name: northstar-models
+  stages:
+    - name: staging
+      promoted_from: automated-evaluation-pipeline
+      promotion_rule: automatic
+      gates:
+        - "Accuracy/Error Bounds: MAE (Mean Absolute Error) <= 4.5 minutes on the frozen validation set."
+        - "Regression Check: Performance must not degrade by >2% compared to the active production model on historical baseline data."
+        - "SLA Smoke Test: P95 latency must be <= 1.2x the target model's SLA during a simulated 50-request load test."
+    - name: production
+      promoted_from: staging
+      promotion_rule: manual
+      gates:
+        - "Slice Performance: MAE <= 6.0 minutes specifically on the bottom 10% worst-performing high-traffic delivery zones (cities)."
+        - "Load & Stress Test: Model must sustain 2x predicted peak RPS (400 RPS for ETA, 100 RPS for Dispatcher) with 0% error rate over a 10-minute load simulation."
+        - "Canary Rollout: Model must successfully handle 10% of live production traffic for 24 hours without triggering automated error-rate or latency alerts."
+      approvers:
+        - "Machine Learning Engineering Lead"
+        - "Director of Logistics Product"
+    - name: archived
+      promoted_from: production-or-staging
+      trigger: "Superceded by a newly approved production model deployment or explicitly rolled back due to operational anomaly."
+
+models:
+  - name: eta
+    owner: "Core Delivery Data Science Team"
+    sla_p95_ms: 150
+    retention_versions: 10
+  - name: dispatcher-routing
+    owner: "Operations & Dispatch Engineering Team"
+    sla_p95_ms: 80
+    retention_versions: 10
+
+lineage:
+  required_fields:
+    - "git_sha: The exact commit hash of the training repository."
+    - "dataset_hash: Content-addressed MD5/SHA256 hash of the training data snapshot."
+    - "training_config_uri: Immutable pointer to the YAML/JSON configuration containing all hyperparameter settings."
+    - "environment_digest: Docker container image digest hash tracking the training runtime environment."
